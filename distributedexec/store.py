@@ -7,6 +7,7 @@ import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from sqlalchemy import create_engine, event, text
+from pydantic import BaseModel, Field, ConfigDict
 from .paths import assets
 
 MAX_UPLOAD = 16 * 1024 * 1024
@@ -16,6 +17,16 @@ MAX_LOG = 256 * 1024
 MAX_WORKSPACE = 512 * 1024 * 1024
 LEASE_SECONDS = 30
 MAX_ATTEMPTS = 3
+
+
+class Limits(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    upload_bytes: int = Field(default=MAX_UPLOAD, ge=1024, le=MAX_UPLOAD)
+    chunk_output_bytes: int = Field(default=MAX_OUTPUT, ge=1024, le=MAX_OUTPUT)
+    job_output_bytes: int = Field(default=MAX_JOB_OUTPUT, ge=1024, le=MAX_JOB_OUTPUT)
+    attempt_log_bytes: int = Field(default=MAX_LOG, ge=1024, le=MAX_LOG)
+    workspace_bytes: int = Field(default=MAX_WORKSPACE, ge=16 * 1024 * 1024, le=1024 ** 4)
+    chunks_per_job: int = Field(default=10000, ge=1, le=10000)
 
 
 def encode(value):
@@ -52,6 +63,8 @@ class Store:
         self.workspace = Path(workspace).resolve()
         self.workspace.mkdir(parents=True, exist_ok=True)
         self.clock = clock
+        limits = self.workspace / 'limits.json'
+        self.limits = Limits.model_validate_json(limits.read_text(encoding='utf-8')) if limits.exists() else Limits()
         self.engine = create_engine('sqlite:///' + str(self.workspace / 'coordinator.sqlite'),
             connect_args={'check_same_thread': False, 'timeout': 5}, pool_size=8, max_overflow=4)
 
@@ -94,20 +107,29 @@ class Store:
         run(conn, 'INSERT INTO events(job_id,created,kind,message) VALUES (:j,:t,:k,:m)',
             j=job, t=self.clock(), k=kind, m=message[:2000])
 
+    def storage_size(self, conn):
+        return one(conn, '''SELECT
+            (SELECT COALESCE(SUM(LENGTH(payload)),0) FROM jobs) +
+            (SELECT COALESCE(SUM(LENGTH(data)+COALESCE(LENGTH(result),0)),0) FROM chunks) +
+            (SELECT COALESCE(SUM(LENGTH(text)),0) FROM logs) +
+            (SELECT COALESCE(SUM(LENGTH(message)),0) FROM events) +
+            (SELECT COALESCE(SUM(size),0) FROM artifacts) AS size''')['size']
+
     def submit(self, req, key=None, parent=None):
         payload = encode(req.model_dump())
-        if len(payload) > MAX_UPLOAD:
-            raise Conflict('Upload exceeds 16 MiB')
+        if len(payload) > self.limits.upload_bytes:
+            raise Conflict('Upload exceeds the configured limit')
+        if (len(req.dataset) + req.chunk_size - 1) // req.chunk_size > self.limits.chunks_per_job:
+            raise Conflict('Too many chunks; increase chunk size (maximum 10,000 chunks per job)')
         fingerprint = digest(payload)
         with self.tx() as conn:
             if key:
                 old = one(conn, 'SELECT * FROM jobs WHERE idempotency_key=:key', key=key)
                 if old:
-                    if old['payload_hash'] != fingerprint:
+                    if old['payload_hash'] != fingerprint or old['parent_id'] != parent:
                         raise Conflict('Idempotency key reused with different payload')
                     return old['id']
-            size = one(conn, 'SELECT COALESCE(SUM(LENGTH(payload)),0) AS size FROM jobs')['size']
-            if size + len(payload) * 2 > MAX_WORKSPACE:
+            if self.storage_size(conn) + len(payload) * 2 > self.limits.workspace_bytes:
                 raise Conflict('Workspace upload budget exhausted; create a new workspace')
             job = uid()
             now = self.clock()
@@ -190,7 +212,8 @@ class Store:
             memory = worker['memory_mb'] - sum(x['memory_mb'] for x in reserved)
             candidates = rows(conn, '''SELECT c.*,j.payload,j.code_hash FROM chunks c JOIN jobs j ON j.id=c.job_id
                 WHERE c.state='queued' AND c.available<=:t AND j.cancel_requested=0 AND j.status IN ('queued','running')
-                ORDER BY j.priority DESC,j.created,c.ordinal LIMIT 500''', t=now)
+                AND json_extract(j.payload,'$.cpu')<=:cpu AND json_extract(j.payload,'$.memory_mb')<=:memory
+                ORDER BY j.priority DESC,j.created,c.ordinal LIMIT 1''', t=now, cpu=cpu + .00001, memory=memory)
             for chunk in candidates:
                 spec = json.loads(chunk['payload'])
                 if spec['cpu'] > cpu + 0.00001 or spec['memory_mb'] > memory:
@@ -237,8 +260,6 @@ class Store:
 
     def complete(self, credential, attempt_id, token, req):
         serialized = encode(req.model_dump())
-        if len(serialized) > MAX_OUTPUT:
-            raise Conflict('Chunk output exceeds 4 MiB')
         fingerprint = digest(serialized)
         with self.tx() as conn:
             attempt = self.attempt(conn, credential, attempt_id, token, live=False)
@@ -249,16 +270,16 @@ class Store:
                     raise Conflict('Completion retransmission expired or cancelled')
                 return {'accepted': True, 'duplicate': True}
             self.attempt(conn, credential, attempt_id, token)
+            if len(serialized) > self.limits.chunk_output_bytes:
+                req = req.model_copy(update={'status': 'invalid_result', 'result': None, 'error': 'Chunk output exceeds configured limit'})
             if req.status == 'succeeded' and req.result is None:
                 raise Conflict('Successful output must be a JSON list')
             output = encode(req.result) if req.status == 'succeeded' else None
             if output:
                 size = one(conn, 'SELECT COALESCE(SUM(LENGTH(result)),0) AS size FROM chunks WHERE job_id=:j', j=attempt['job_id'])['size']
-                if size + len(output) > MAX_JOB_OUTPUT:
-                    raise Conflict('Job output exceeds 32 MiB')
-                total = one(conn, 'SELECT COALESCE(SUM(LENGTH(result)),0) AS size FROM chunks')['size']
-                if total + len(output) > MAX_WORKSPACE:
-                    raise Conflict('Workspace output budget exhausted')
+                if size + len(output) > self.limits.job_output_bytes or self.storage_size(conn) + len(output) * 2 > self.limits.workspace_bytes:
+                    req = req.model_copy(update={'status': 'invalid_result', 'result': None, 'error': 'Job or workspace output budget exhausted'})
+                    output = None
             now = self.clock()
             run(conn, '''UPDATE attempts SET state=:s,finished=:t,completion_hash=:h,error=:e,runtime_id=:r,exit_code=:x,duration=:d WHERE id=:id''',
                 s=req.status, t=now, h=fingerprint, e=req.error, r=req.runtime_id, x=req.exit_code, d=req.duration, id=attempt_id)
@@ -285,7 +306,7 @@ class Store:
                 return
             self.attempt(conn, credential, attempt, token)
             size = one(conn, 'SELECT COALESCE(SUM(LENGTH(text)),0) AS n FROM logs WHERE attempt_id=:a', a=attempt)['n']
-            if size + len(req.text.encode('utf-8')) > MAX_LOG:
+            if size + len(req.text.encode('utf-8')) > self.limits.attempt_log_bytes or self.storage_size(conn) + len(req.text.encode('utf-8')) > self.limits.workspace_bytes:
                 raise Conflict('Attempt log limit reached')
             run(conn, 'INSERT INTO logs VALUES (:a,:s,:stream,:text,:t)', a=attempt, s=req.seq, stream=req.stream, text=req.text, t=self.clock())
 

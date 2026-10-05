@@ -1,5 +1,5 @@
 import keyword
-import math
+import json
 from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -17,6 +17,12 @@ class RunRequest(Strict):
     cpu: float = Field(default=1, ge=0.1, le=128)
     memory_mb: int = Field(default=256, ge=64, le=131072)
     timeout: int = Field(default=120, ge=1, le=86400)
+
+    @field_validator('dataset')
+    @classmethod
+    def json_array(cls, value):
+        json.dumps(value, allow_nan=False)
+        return value
 
     @field_validator('function_name')
     @classmethod
@@ -47,6 +53,12 @@ class Completion(Strict):
     runtime_id: str = Field(min_length=1, max_length=256)
     exit_code: int | None = None
     duration: float = Field(default=0, ge=0)
+
+    @field_validator('result')
+    @classmethod
+    def json_result(cls, value):
+        json.dumps(value, allow_nan=False)
+        return value
 
 
 class LogRequest(Strict):

@@ -15,6 +15,19 @@ from .store import encode, digest, MAX_OUTPUT, MAX_LOG
 IMAGE = 'distributedexec-runtime:stdlib-v1'
 
 
+def remove_attempt(path, root):
+    if path.is_symlink() or path.resolve().parent != root.resolve():
+        raise RuntimeError('Refusing cleanup outside the owned attempt directory')
+    def writable(function, filename, error):
+        file = Path(filename)
+        if file.is_symlink():
+            file.unlink()
+            return
+        os.chmod(file, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
+        function(filename)
+    shutil.rmtree(path, onexc=writable)
+
+
 def selected_endpoint():
     """Read the selected Docker CLI context without executing its CLI or silently switching."""
     root = Path(os.environ.get('DOCKER_CONFIG', Path.home() / '.docker'))
@@ -131,7 +144,7 @@ class DockerExecutor:
                 if path.is_symlink():
                     continue
                 if path.is_dir() and path.resolve().parent == self.root:
-                    shutil.rmtree(path)
+                    remove_attempt(path, self.root)
         finally:
             client.close()
 
@@ -241,4 +254,4 @@ class DockerExecutor:
             # Input files were deliberately read-only; make them removable on Windows.
             for file in input_dir.iterdir():
                 os.chmod(file, stat.S_IWRITE | stat.S_IREAD)
-            shutil.rmtree(path)
+            remove_attempt(path, self.root)

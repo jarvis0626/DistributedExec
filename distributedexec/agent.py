@@ -41,6 +41,7 @@ class Agent:
         self.runtime_id = None
         self.hb_wake = threading.Event()
         self.hb_ready = threading.Event()
+        self.sent_logs = {}
 
     def request(self, route, payload=None, token=None, retry=True):
         headers = {'Authorization': 'Bearer ' + self.credential}
@@ -116,8 +117,14 @@ class Agent:
         task = pending['task']
         route = f"/api/worker/attempts/{task['attempt_id']}"
         try:
-            for log in pending['logs']:
-                self.request(route + '/logs', log, task['attempt_token'])
+            for log in pending['logs'][self.sent_logs.get(task['attempt_id'], 0):]:
+                try:
+                    self.request(route + '/logs', log, task['attempt_token'])
+                except requests.HTTPError as exc:
+                    # A tighter coordinator log limit should truncate logs, not lose the completion.
+                    if exc.response.status_code != 409 or 'log limit' not in exc.response.text.lower():
+                        raise
+                self.sent_logs[task['attempt_id']] = log['seq'] + 1
             if pending.get('completion'):
                 self.request(route + '/complete', pending['completion'], task['attempt_token'])
                 path.unlink(missing_ok=True)
@@ -127,6 +134,33 @@ class Agent:
                 path.unlink(missing_ok=True)
             else:
                 raise
+        if not path.exists():
+            self.sent_logs.pop(task['attempt_id'], None)
+            with self.lock:
+                item = self.active.get(task['attempt_id'])
+                if item:
+                    item['reported'].set()
+
+    def reporter(self):
+        while not self.stop.is_set():
+            for path in list(self.outbox.glob('*.json'))[:32]:
+                if self.stop.is_set():
+                    break
+                try:
+                    self.report(path)
+                except Exception:
+                    pass  # Durable outbox is replayed with the same sequence IDs and completion hash.
+            self.stop.wait(1)
+
+    def safety(self, owner_alive):
+        while not self.stop.is_set():
+            if not owner_alive():
+                self.stop_now()
+            with self.lock:
+                for item in self.active.values():
+                    if time.monotonic() >= item['deadline']:
+                        item['stop'].set()
+            self.stop.wait(0.1)
 
     def execute(self, task):
         attempt = task['attempt_id']
@@ -148,7 +182,9 @@ class Agent:
 
         try:
             self.executor.execute(task, self.active[attempt]['stop'], log, persist=persist)
-            self.report(spool)
+            while not self.active[attempt]['reported'].wait(0.2):
+                if time.monotonic() >= self.active[attempt]['deadline']:
+                    break
         except Exception as exc:
             self.error = str(exc)[:1500]
             LOG.exception('Attempt execution/report failed: %s', attempt)
@@ -165,7 +201,10 @@ class Agent:
         self.executor.reconcile()
         heartbeat = threading.Thread(target=self.heartbeat, daemon=True)
         heartbeat.start()
-        next_replay = 0
+        reporter = threading.Thread(target=self.reporter, daemon=True)
+        reporter.start()
+        safety = threading.Thread(target=self.safety, args=(owner_alive,), daemon=True)
+        safety.start()
         try:
             while True:
                 self.commands()
@@ -190,26 +229,22 @@ class Agent:
                             ident = task['attempt_id']
                             with self.lock:
                                 self.active[ident] = {'stop': threading.Event(), 'deadline': sent + task['lease_seconds'] - 5,
-                                    'cpu': task['cpu'], 'memory_mb': task['memory_mb'], 'ordinal': task['ordinal'], 'job_id': task['job_id']}
+                                    'reported': threading.Event(), 'cpu': task['cpu'], 'memory_mb': task['memory_mb'], 'ordinal': task['ordinal'], 'job_id': task['job_id']}
                             threading.Thread(target=self.execute, args=(task,), daemon=True).start()
                             self.hb_wake.set()
                     except Exception as exc:
                         self.error = str(exc)[:1500]
-                if time.monotonic() >= next_replay:
-                    next_replay = time.monotonic() + 5
-                    with self.lock:
-                        running = set(self.active)
-                    for path in list(self.outbox.glob('*.json'))[:32]:
-                        if path.stem not in running:
-                            try:
-                                self.report(path)
-                            except Exception:
-                                pass
                 self.stop.wait(0.3)
         finally:
+            self.stop_now()
+            until = time.monotonic() + 12
+            while self.active and time.monotonic() < until:
+                time.sleep(0.1)
             self.stop.set()
             self.hb_wake.set()
             heartbeat.join(timeout=9)
+            reporter.join(timeout=9)
+            safety.join(timeout=2)
             try:
                 self.request('/api/worker/heartbeat', {'attempts': [], 'mode': 'stopped', 'runtime_id': self.runtime_id}, retry=False)
             except Exception:

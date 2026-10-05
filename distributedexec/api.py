@@ -64,8 +64,8 @@ def create_app(workspace, admin_token, allowed_hosts=None, shutdown=None):
             body = bytearray()
             async for part in request.stream():
                 body.extend(part)
-                if len(body) > MAX_UPLOAD:
-                    return JSONResponse({'detail': 'Request exceeds 16 MiB'}, status_code=413)
+                if len(body) > store.limits.upload_bytes:
+                    return JSONResponse({'detail': 'Request exceeds configured upload limit'}, status_code=413)
             request._body = bytes(body)
         response = await next_call(request)
         response.headers['X-Content-Type-Options'] = 'nosniff'

@@ -76,10 +76,16 @@ def main(argv=None):
     if args.mode == 'worker':
         from .agent import Agent
         agent = Agent(json.loads(args.config.read_text(encoding='utf-8')))
+        worker_lock = FileLock(agent.root / 'agent.lock')
         try:
+            worker_lock.acquire(timeout=0)
             agent.run(owner_check(args.owner_pid))
+        except Timeout:
+            raise RuntimeError('This worker profile is already running')
         except KeyboardInterrupt:
             agent.stop_now()
+        finally:
+            worker_lock.release()
         return 0
     from .api import create_app
     from .credentials import admin_secret
@@ -92,6 +98,7 @@ def main(argv=None):
     except Timeout:
         raise RuntimeError('This workspace is already hosted by another coordinator')
     listener = None
+    local_listener = None
     try:
         listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         if os.name == 'nt':
@@ -99,6 +106,14 @@ def main(argv=None):
         listener.bind((args.bind, args.port))
         listener.listen(128)
         actual_port = listener.getsockname()[1]
+        sockets = [listener]
+        if args.bind not in ('0.0.0.0', '127.0.0.1'):
+            local_listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            if os.name == 'nt':
+                local_listener.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            local_listener.bind(('127.0.0.1', actual_port))
+            local_listener.listen(128)
+            sockets.append(local_listener)
         token = admin_secret(workspace)
         hosts = ['127.0.0.1', 'localhost', args.bind, *args.address]
         server = None
@@ -125,11 +140,13 @@ def main(argv=None):
                     except requests.RequestException:
                         time.sleep(0.2)
             threading.Thread(target=browser, daemon=True).start()
-        server.run(sockets=[listener])
+        server.run(sockets=sockets)
     except OSError as exc:
         raise RuntimeError(f'Cannot host on {args.bind}:{args.port}; choose a free port. No other process was stopped.') from exc
     finally:
         if listener:
             listener.close()
+        if local_listener:
+            local_listener.close()
         lock.release()
     return 0
