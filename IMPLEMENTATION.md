@@ -1,0 +1,19 @@
+# DistributedExec implementation checklist
+
+- [x] A: Inspect prototype and local changes; capture ordered result contract and empty-input defect.
+- [ ] B: Durable SQLite coordinator, authenticated transfer, isolated Docker execution, ordered downloads.
+- [ ] C: Concurrent scheduling, renewable leases, recovery, logs, revocation and cancellation.
+- [ ] D: Native launcher, Docker onboarding, offline browser dashboard.
+- [ ] E: Windows onedir build, automated acceptance checks, documentation and handoff.
+
+Each major milestone is committed and pushed to origin/main as requested. No release publication.
+
+## Baseline (2026-10-05)
+
+Checkout: d4d151c. Local host.py change uses UTF-8 for the dashboard; preserve explicit UTF-8 decoding.
+No AGENTS.md found in the workspace or parent directories. GitHub remote is jarvis0626/DistributedExec.
+Existing contract: a Python function consumes a JSON array; chunks aggregate in input order.
+Observed: empty input divides into a zero range step; job/worker state is volatile, routes unauthenticated,
+worker heartbeat stops during execution, and no lease or attempt ownership exists.
+Baseline tests exercise ordered aggregation, the no-worker queue and the known empty-input failure.
+Docker CLI is unavailable on this Windows development machine. Container tests must be reported as skipped.
