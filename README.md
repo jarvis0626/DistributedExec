@@ -1,20 +1,33 @@
 ﻿# DistributedExec
 
-A Windows-first desktop application for running trusted Python functions across trusted computers on a private LAN. This upgrades the original DistributedExec project: the Monaco browser editor, JSON arrays and ordered chunk computation remain its core workflow.
+A Windows-first desktop application for running trusted Python functions across trusted computers on a private network. Computers can share a LAN or connect from different Wi-Fi networks through the guided Tailscale connection. The Monaco browser editor, JSON arrays and ordered chunk computation remain its core workflow.
 
 ## For normal users
 
-1. Download and open **DistributedExec-1.1.0-windows-x64-setup.exe**. It installs the app for your Windows account, including Python and all application libraries, and creates a Start menu shortcut. No ZIP extraction, Python or pip setup is needed.
-2. Choose **Host a workspace**, select your LAN interface and a free port. The browser dashboard opens automatically. The launcher displays the host address and a pairing code that expires after ten minutes. **Hosting requires no Docker or Python installation.**
+1. Download and open [**DistributedExec-1.2.0-windows-x64-setup.exe**](https://github.com/jarvis0626/DistributedExec/releases/download/v1.2.0/DistributedExec-1.2.0-windows-x64-setup.exe). It installs the app for your Windows account, including Python and all application libraries, and creates a Start menu shortcut. No ZIP extraction, Python or pip setup is needed.
+2. Choose **Host a workspace**, confirm the automatically selected active LAN interface and choose a free port. The browser dashboard opens automatically. The launcher displays the host address and a pairing code that expires after ten minutes. **Hosting requires no Docker or Python installation.**
 3. To contribute compute, select **Set up compute** in the installer or launcher. It reuses existing Docker; otherwise it downloads Docker Desktop from its official HTTPS service, verifies Docker Inc's Windows signature and opens the vendor installer. Complete Docker's welcome/setup screens; Windows may need WSL2, hardware virtualization enabled or a restart. The app then prepares its compute runtime automatically. Cancel setup stops our download/wait; an already-open Docker installer remains under your control. For Linux use [Docker Engine](https://docs.docker.com/engine/install/) and **Prepare runtime**. First compute setup needs internet; no Git checkout is required.
-4. Choose **Join as a worker**. Enter the host address and pairing code, name your computer, and choose CPU/RAM/concurrency budgets. Enable **Also contribute compute while hosting** explicitly if one computer should do both.
+4. Choose **Join as a worker**. Paste a connection invitation from the host, or enter the host address and pairing code manually. Name your computer and choose CPU/RAM/concurrency budgets. Enable **Also contribute compute while hosting** explicitly if one computer should do both.
 5. In the dashboard, choose an example, edit `def task(data): ...`, provide a JSON array or drop a JSON file, and execute. Inspect jobs, accepted progress, attempts, errors and live logs. Download the full ordered JSON result. **Clear file** restores manual dataset editing.
 
 Docker is downloaded only for compute machines that need it; its installer is cached for retries and signature-checked again before reuse. Its own terms and Windows setup remain visible; the app does not accept agreements or restart Windows automatically. WSL2 and hardware virtualization must work; see [Docker's WSL2 setup](https://docs.docker.com/desktop/features/wsl/). Preparation builds an approved image from a digest-pinned Python base. Monaco, its loader/fonts and notices are bundled locally. After preparation, the app and jobs can operate offline on the LAN. Uninstall removes application files and shortcuts while preserving your workspaces, settings, credentials and Docker.
 
 The launcher supports pause-new-work, graceful disconnect, stop-now, saved-worker reconnection, pairing rotation, worker revocation, opening logs and redacted diagnostics. It owns its service processes and shuts them down deliberately. Credentials use the OS credential store when available. Configuration, logs and workspaces live in per-user directories, never the installed app folder. No auto-start on login or automatic firewall changes.
 
-Plain HTTP is appropriate only for trusted private-LAN use and **does not encrypt credentials or data**. Docker adds isolation but is not a complete hostile-code boundary. Do not expose this service to the internet or use untrusted scripts. [Security limits](docs/SECURITY.md) explain the container controls, credential fallback and watchdog limits.
+For a first job, keep the Transformation example and the eight sample numbers. Connect a ready worker, then choose Distribute & execute. The result contains each number and its square. An empty array can be used to check hosting and result downloads without a worker. Saved worker connections remain available after reopening the launcher or hosting a different workspace; Reconnect saved uses the original resource budgets.
+
+The dashboard previews item/chunk counts and explains invalid inputs, waiting jobs and unavailable workers. If the host connection drops, job actions are disabled until it returns. Reopening the dashboard from the launcher refreshes an expired browser session. Retrying a failed or cancelled job uses its original code, dataset and settings; submit a new job to use edits.
+
+Plain HTTP on a LAN **does not encrypt credentials or data**. Across-network mode carries application traffic inside Tailscale's encrypted private connection and binds the host to its Tailscale address plus local loopback. Docker adds isolation but is not a complete hostile-code boundary. Use trusted computers and scripts. [Security limits](docs/SECURITY.md) explain the container controls, credential fallback and watchdog limits.
+
+## Connect computers on different Wi-Fi networks
+
+1. In the launcher, choose **Different networks** or open the cross-network setup panel on a worker.
+2. Choose **Install Tailscale** on each computer if needed. On Windows the app downloads Tailscale from its official service, verifies its Tailscale Inc. signature, and opens the vendor installer. Finish its setup and use **Open Tailscale sign-in** if prompted. For your own computers, use the same Tailscale account; invite another person into the same private network using Tailscale's account controls. Passwords and Tailscale authentication keys are never shared in a DistributedExec invitation.
+3. Choose **Check connection**. Once ready, start the host in Different networks mode. Keep the host running.
+4. On the host, choose **Copy invitation for another computer**. Send that invitation privately to the worker. On the worker, paste it into the invitation field; the address and code fill automatically. Select **Connect** when compute and the private connection are ready. Invitations contain the host address and a pairing code valid for at most ten minutes.
+
+No router port forwarding is required. Both computers need internet and permission to communicate within the same Tailscale private network. Local LAN mode still works without Tailscale. See [connection setup and troubleshooting](docs/REMOTE_CONNECTIVITY.md), [Tailscale Windows setup](https://tailscale.com/docs/install/windows), and [Tailscale device connectivity](https://tailscale.com/docs/how-to/connect-to-devices).
 
 ## The computation model
 
@@ -31,7 +44,7 @@ See [architecture and state transitions](docs/ARCHITECTURE.md), [clean-machine a
 
 ## Find or build the executable
 
-The repository's [Windows build workflow](https://github.com/jarvis0626/DistributedExec/actions/workflows/windows-build.yml) uploads **DistributedExec-windows-installer**, containing the single setup EXE and its SHA256 checksum. GitHub wraps workflow artifacts in ZIPs for developers; attach the **setup EXE itself** to a GitHub Release so users download and run that one file. The workflow does not publish releases automatically. A local build writes `dist/DistributedExec-1.1.0-windows-x64-setup.exe` and its `.sha256` file; the intermediate app folder remains at `dist/DistributedExec/`.
+The repository's [Windows build workflow](https://github.com/jarvis0626/DistributedExec/actions/workflows/windows-build.yml) uploads **DistributedExec-windows-installer**, containing the single setup EXE and its SHA256 checksum. GitHub wraps workflow artifacts in ZIPs for developers; attach the **setup EXE itself** to a GitHub Release so users download and run that one file. The workflow does not publish releases automatically. A local build writes `dist/DistributedExec-1.2.0-windows-x64-setup.exe` and its `.sha256` file; the intermediate app folder remains at `dist/DistributedExec/`.
 
 For developers on Windows with Python 3.12, run:
 
@@ -71,6 +84,7 @@ The benchmark compares the same PBKDF2 workload and verifies full result equalit
 - **Remote Docker context:** V1 accepts only local named-pipe/Unix-socket endpoints. Select a local context before pairing; reconnect refuses to silently switch endpoints.
 - **No eligible workers:** check worker runtime readiness, paused/offline status and whether available CPU/RAM can satisfy the job's reservations. Increase chunk size for very large arrays or excessive startup overhead.
 - **LAN connection failure:** ensure both machines can reach the selected address/port and inspect Windows firewall rules yourself. The app never modifies firewall settings.
+- **Pairing failed:** copy a current code from the host launcher. If too many pairing attempts were made, wait one minute before trying again. Entering a new code does not bypass that temporary limit.
 - **Port/workspace busy:** choose a free port or a different workspace. Existing services are never killed to claim the port/database.
 - **Dashboard asks for sign-in:** use Open dashboard in the host launcher; a new local ticket refreshes the browser session.
 - **Output/log budget reached:** outputs fail clearly; logs are truncated at configured limits. Workspace history is retained. Back up stopped workspaces and choose a new workspace when their content budget is exhausted.

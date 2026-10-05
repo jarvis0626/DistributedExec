@@ -4,6 +4,7 @@ import secrets
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -15,7 +16,7 @@ from .store import Store, Conflict, digest, encode, one, rows, run, MAX_UPLOAD
 
 def create_app(workspace, admin_token, allowed_hosts=None, shutdown=None):
     store = Store(workspace)
-    hosts = set(allowed_hosts or ['localhost', '127.0.0.1', '[::1]'])
+    hosts = {host.strip('[]').lower() for host in (allowed_hosts or ['localhost', '127.0.0.1', '::1'])}
 
     @asynccontextmanager
     async def lifespan(app):
@@ -36,6 +37,12 @@ def create_app(workspace, admin_token, allowed_hosts=None, shutdown=None):
 
     app = FastAPI(title='DistributedExec', lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.store = store
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(_, exc):
+        # Rejected inputs can contain NaN/Infinity; echoing them would turn a 422 into a 500.
+        details = [{key: error[key] for key in ('type', 'loc', 'msg')} for error in exc.errors()]
+        return JSONResponse({'detail': details}, status_code=422)
 
     @app.exception_handler(Conflict)
     async def conflict(_, exc):

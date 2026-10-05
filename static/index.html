@@ -9,23 +9,54 @@
   <script defer src="/static/app.js"></script>
 </head>
 <body>
+<a class="skip-link" href="#workspace">Skip to workspace</a>
 <div class="container">
-  <header><div><h1>DistributedExec</h1><p class="muted">Python functions across your trusted LAN</p><span id="connection" class="muted">Connecting…</span></div>
-    <div id="workerBadge" class="status-badge offline"><span id="workerCount">Checking workers…</span></div></header>
-  <div id="message" role="status" aria-live="polite">Write a function that receives and returns a JSON array. Each chunk runs in its own Docker container.</div>
-  <section id="onboarding" class="panel"><h2>Open your workspace</h2><p>Open the DistributedExec desktop application and choose <strong>Host a workspace</strong>, then Open dashboard. This authenticates your local browser.</p><p class="muted">To contribute compute, launch DistributedExec on another computer, prepare its Docker runtime, and choose Join as a worker using the host address and expiring pairing code from the host launcher.</p></section>
-  <main id="workspace" class="layout" hidden>
+  <header>
+    <div><h1>DistributedExec</h1><p class="muted">Run Python functions across your trusted LAN</p><span id="connection" class="muted" role="status">Connecting...</span></div>
+    <div id="workerBadge" class="status-badge offline"><span id="workerCount">Checking workers...</span></div>
+  </header>
+  <div id="message" role="status" aria-live="polite">Choose an example, add a JSON array, then submit your job.</div>
+  <div id="connectionIssue" class="notice warning" hidden><p id="connectionHelp"></p><button type="button" id="reconnect" class="btn small secondary">Check connection</button></div>
+  <section id="onboarding" class="panel" aria-labelledby="onboardingTitle">
+    <h2 id="onboardingTitle">Open your workspace</h2>
+    <ol class="steps"><li>Open the DistributedExec desktop application.</li><li>Choose <strong>Host a workspace</strong> and start the host.</li><li>Choose <strong>Open dashboard</strong> to sign in to this browser.</li></ol>
+    <p class="muted">If this page was bookmarked or your session expired, open a fresh dashboard from the desktop launcher.</p>
+    <p class="muted">For compute, use a computer with Docker ready and choose <strong>Join as a worker</strong>. Use the host address and expiring pairing code shown in the host launcher.</p>
+  </section>
+  <main id="workspace" class="layout" tabindex="-1" hidden>
     <div>
-      <section class="panel"><h2>Python function</h2><label for="example">Example</label><select id="example"><option value="transform">Transformation</option><option value="cpu">CPU-heavy computation</option><option value="error">Intentional error</option><option value="long">Long-running cancellation / recovery</option></select>
-        <p class="muted">Trusted scripts only. No automatic parallelization or shared memory across chunks. Standard library runtime.</p>
-        <label for="code">Code</label><textarea id="code" spellcheck="false"></textarea><div id="editorContainer" hidden></div>
-        <div class="fields"><label>Function name<input id="funcName" value="task"></label><label>Resource preset<select id="preset"><option value="small">Small · 1 CPU / 256 MiB</option><option value="balanced">Balanced · 2 CPU / 512 MiB</option><option value="large">Large · 4 CPU / 1024 MiB</option></select></label></div>
-        <details><summary>Advanced settings</summary><div class="fields"><label>CPU reservation<input type="number" id="cpu" value="1" min="0.1" max="128" step="0.1"></label><label>RAM (MiB)<input type="number" id="memory" value="256" min="64" max="131072"></label><label>Timeout (s)<input type="number" id="timeout" value="120" min="1" max="86400"></label><label>Chunk size<input type="number" id="chunkSize" value="1000" min="1" max="1000000"></label><label>Priority (-10 to 10)<input type="number" id="priority" value="0" min="-10" max="10"></label></div><p class="muted">Reservations enforce container limits; they are not measured usage. Small chunks pay container startup and transfer overhead.</p></details>
+      <div id="workerHint" class="notice warning" role="status" hidden></div>
+      <form id="jobForm" novalidate>
+        <section class="panel" aria-labelledby="functionTitle">
+          <h2 id="functionTitle"><span class="step-number">1</span> Python function</h2>
+          <label for="example">Start with an example</label><select id="example"><option value="transform">Transformation: square each number</option><option value="cpu">CPU-heavy computation</option><option value="error">Intentional error</option><option value="long">Long-running cancellation / recovery</option></select>
+          <p class="muted" id="codeHelp">Your function receives a list and must return a JSON-compatible list. Each chunk runs separately using the Python standard library. Use trusted scripts.</p>
+          <label for="code">Code</label><textarea id="code" spellcheck="false" aria-describedby="codeHelp"></textarea><div id="editorContainer" hidden></div>
+          <div class="fields"><label for="funcName">Function name<input id="funcName" value="task" required autocomplete="off" spellcheck="false"></label><label for="preset">Resource preset<select id="preset"><option value="small">Small - 1 CPU / 256 MiB</option><option value="balanced">Balanced - 2 CPU / 512 MiB</option><option value="large">Large - 4 CPU / 1024 MiB</option><option value="custom" disabled>Custom resources</option></select></label></div>
+          <details id="advancedSettings"><summary>Advanced settings</summary><div class="fields"><label for="cpu">CPU reservation<input type="number" id="cpu" value="1" min="0.1" max="128" step="any" required></label><label for="memory">RAM (MiB)<input type="number" id="memory" value="256" min="64" max="131072" step="1" required></label><label for="timeout">Timeout (seconds)<input type="number" id="timeout" value="120" min="1" max="86400" step="1" required></label><label for="chunkSize">Items per chunk<input type="number" id="chunkSize" value="1000" min="1" max="1000000" step="1" required></label><label for="priority">Priority (-10 to 10)<input type="number" id="priority" value="0" min="-10" max="10" step="1" required></label></div><p class="muted">Higher priority runs first. Reservations set container limits. Each chunk has its own timeout; smaller chunks add startup and transfer overhead.</p></details>
+        </section>
+        <section class="panel" aria-labelledby="datasetTitle">
+          <h2 id="datasetTitle"><span class="step-number">2</span> JSON dataset</h2>
+          <div id="dropZone"><p id="dropZoneText" aria-live="polite">Choose or drop a JSON array file (up to 15 MiB)</p><div class="actions"><button type="button" class="btn small" id="chooseFile">Choose file</button><button type="button" class="btn small secondary" id="clearUpload" disabled>Clear file</button></div><input id="fileInput" type="file" accept=".json,application/json" aria-label="JSON array file" hidden></div>
+          <label for="dataset">Or edit an array</label><textarea id="dataset" rows="4" spellcheck="false" aria-describedby="datasetSummary">[1, 2, 3, 4, 5, 6, 7, 8]</textarea>
+          <p id="datasetSummary" class="muted" aria-live="polite"></p>
+          <p id="validationError" class="notice error" role="alert" hidden></p>
+          <div class="actions"><button type="submit" id="runBtn" class="btn" disabled>Distribute &amp; execute</button></div>
+        </section>
+      </form>
+      <section id="detail" class="panel" aria-labelledby="jobTitle" hidden>
+        <h2 id="jobTitle"></h2><progress id="progress" max="1" value="0" aria-label="Completed chunks"></progress><p id="progressText" role="status" aria-live="polite"></p><p class="notice warning" id="queuedReason" hidden></p><pre id="error" hidden></pre>
+        <div class="actions"><button type="button" class="btn small danger" id="cancel" disabled>Cancel job</button><button type="button" class="btn small secondary" id="retry" disabled>Retry as new job</button><a class="btn small" id="download" download hidden>Download full JSON result</a></div>
+        <p id="retryHelp" class="muted" hidden>A retry uses the original code, dataset and settings. Edits above apply when you submit a new job.</p><pre id="preview"></pre>
+        <details class="job-diagnostics"><summary>Chunks and attempt history</summary><div class="scroll" tabindex="0" role="region" aria-label="Chunk attempts"><table><thead><tr><th scope="col">Chunk</th><th scope="col">State</th><th scope="col">Computer</th><th scope="col">Attempt</th><th scope="col">Runtime</th><th scope="col">Error</th></tr></thead><tbody id="attempts"></tbody></table></div></details>
+        <details class="job-diagnostics" open><summary>Live logs</summary><pre id="logs">No logs yet.</pre></details>
       </section>
-      <section class="panel"><h2>JSON dataset</h2><div id="dropZone"><p id="dropZoneText">Choose or drop a JSON array file</p><div class="actions"><button class="btn small" id="chooseFile">Choose file</button><button class="btn small secondary" id="clearUpload">Clear file</button></div><input id="fileInput" type="file" accept=".json,application/json" hidden></div><label for="dataset">Or edit an array</label><textarea id="dataset" rows="4">[1, 2, 3, 4, 5, 6, 7, 8]</textarea><div class="actions"><button id="runBtn" class="btn">Distribute &amp; execute</button></div></section>
-      <section id="detail" class="panel" hidden><h2 id="jobTitle"></h2><progress id="progress" max="1" value="0"></progress><p id="progressText"></p><p class="muted" id="queuedReason"></p><pre id="error"></pre><div class="actions"><button class="btn small danger" id="cancel">Cancel job</button><button class="btn small secondary" id="retry">Retry as new job</button><a class="btn small" id="download" download hidden>Download full JSON result</a></div><pre id="preview"></pre><h2>Chunks and attempt history</h2><div class="scroll"><table><thead><tr><th>Chunk</th><th>State</th><th>Computer</th><th>Attempt</th><th>Runtime</th><th>Error</th></tr></thead><tbody id="attempts"></tbody></table></div><h2>Live logs</h2><pre id="logs">No logs yet.</pre></section>
     </div>
-    <aside><section class="panel"><h2>Jobs &amp; history</h2><p class="muted">Most recent 100 jobs. Total duration includes queueing, container startup, transfer and aggregation.</p><div id="jobs"></div></section><section class="panel"><h2>Worker computers</h2><div id="workers"></div></section><section class="panel"><h2>Connect another computer</h2><p>Install DistributedExec and Docker Desktop (Linux containers) on a worker. Prepare runtime, then enter the host address and pairing code in Join as a worker.</p><p class="muted">Pairing codes are available only in the host's desktop launcher. Host-only mode needs no Docker. Plain HTTP is for a trusted private LAN and does not encrypt scripts or credentials.</p></section></aside>
+    <aside>
+      <section class="panel"><h2>Jobs &amp; history</h2><p class="muted">Select a job to view its progress and results. Showing the latest 100 jobs; total time includes waiting and setup.</p><div id="jobs"></div></section>
+      <section class="panel"><h2>Worker computers</h2><div id="workers"></div></section>
+      <section class="panel" id="connectHelp"><h2>Connect another computer</h2><ol class="steps"><li>Install DistributedExec and Docker Desktop using Linux containers.</li><li>Prepare the runtime in the desktop launcher.</li><li>Choose <strong>Join as a worker</strong> and enter the host address and pairing code.</li></ol><p class="muted">On different Wi-Fi networks, choose Different networks in the desktop launcher, finish connection setup on both computers, then copy/paste the host's connection invitation.</p><p class="muted">Pairing codes are shown in the host's desktop launcher. Host-only mode needs no Docker. Plain HTTP is for a trusted private LAN and does not encrypt scripts or credentials.</p></section>
+    </aside>
   </main>
 </div>
 </body>

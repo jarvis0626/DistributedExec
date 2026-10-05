@@ -8,6 +8,7 @@ import time
 import uuid
 from pathlib import Path
 import docker
+import requests
 from docker.types import LogConfig
 from .paths import assets, data_dir, private_file
 from .store import encode, digest, MAX_OUTPUT, MAX_LOG
@@ -138,17 +139,27 @@ class DockerExecutor:
         self.root.mkdir(parents=True, exist_ok=True)
 
     def reconcile(self):
-        client = client_for(self.endpoint)
-        try:
-            for container in client.containers.list(all=True, filters={'label': ['org.distributedexec.app=DistributedExec', f'org.distributedexec.worker={self.worker_id}']}):
-                container.remove(force=True)
-            for path in self.root.iterdir():
-                if path.is_symlink():
-                    continue
-                if path.is_dir() and path.resolve().parent == self.root:
-                    remove_attempt(path, self.root)
-        finally:
-            client.close()
+        # Docker Desktop can briefly stall even after its readiness probe. Owned
+        # cleanup is idempotent, but must finish before the worker accepts work.
+        for attempt in range(3):
+            client = None
+            try:
+                client = client_for(self.endpoint)
+                for container in client.containers.list(all=True, filters={'label': ['org.distributedexec.app=DistributedExec', f'org.distributedexec.worker={self.worker_id}']}):
+                    container.remove(force=True)
+                for path in self.root.iterdir():
+                    if path.is_symlink():
+                        continue
+                    if path.is_dir() and path.resolve().parent == self.root:
+                        remove_attempt(path, self.root)
+                return
+            except (requests.Timeout, requests.ConnectionError):
+                if attempt == 2:
+                    raise
+            finally:
+                if client is not None:
+                    client.close()
+            time.sleep(.2 * (attempt + 1))
 
     def execute(self, task, stop, log=lambda *_: None, persist=lambda _: None):
         start = time.monotonic()

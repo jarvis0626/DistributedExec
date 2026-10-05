@@ -21,6 +21,20 @@
 10. Check Open logs folder and Copy diagnostics. Never submit untrusted scripts or expose the host publicly.
 11. Reinstall/upgrade and uninstall. Confirm app files/shortcuts are removed but workspaces, settings,
     credentials and Docker remain. Test the launch-with-compute installer checkbox on a fresh account.
+12. Reopen the launcher and host a workspace before reconnecting a saved worker. Confirm the saved
+    connection is preserved. Check actionable errors for malformed addresses, empty names/codes,
+    expired codes and a temporary pairing rate limit. Resize the launcher and browser to confirm
+    their controls remain accessible. Check validation errors before submitting a job, a lost
+    connection followed by recovery, and the queued explanation when no worker can accept the job.
+
+13. Put the host and worker on separate Wi-Fi networks or use a mobile hotspot. On both, open the
+    cross-network panel, install Tailscale if missing, and finish authorized sign-in to the same
+    permitted private network. Check that missing, signed-out and ready states give actionable steps.
+    On the host choose Different networks; confirm the selected private address and local dashboard.
+    Paste its invitation into the worker, verify automatic address/code filling, run a multi-chunk
+    job, inspect logs and download the ordered result. Reject an expired or rotated invitation.
+    Verify saved reconnect after restarting, network interruption/recovery, and LAN mode without
+    Tailscale. Confirm existing Tailscale account, routes and exit-node preferences stay intact.
 
 ## Repeatable developer checks
 

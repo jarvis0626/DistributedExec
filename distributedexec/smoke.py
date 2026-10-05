@@ -11,13 +11,15 @@ from .paths import assets, logs_dir
 from .credentials import admin_secret, save
 from .agent import write_json
 from .runtime import check_runtime
+from .network import encode_invitation, decode_invitation
 
 
 def smoke():
     from .launcher import command
     report = {'application': 'DistributedExec', 'assets': [], 'checks': [], 'docker': 'not tested'}
     for name in ['static/index.html', 'static/app.js', 'static/vendor/monaco/vs/loader.js',
-                 'runtime/Dockerfile', 'runtime/runner.py', 'migrations/001_initial.sql', 'licenses/Monaco-LICENSE']:
+                 'runtime/Dockerfile', 'runtime/runner.py', 'migrations/001_initial.sql', 'licenses/Monaco-LICENSE',
+                 'docs/REMOTE_CONNECTIVITY.md']:
         assert (assets() / name).is_file(), name
         report['assets'].append(name)
     os.environ['QT_QPA_PLATFORM'] = 'offscreen'
@@ -82,10 +84,13 @@ def smoke():
             response.raise_for_status()
             assert session.get(url + '/api/status', timeout=3).status_code == 200
             report['checks'].append('Local browser session bootstrap')
+            pairing = call('/api/desktop/pairing')
+            invitation = decode_invitation(encode_invitation(url, pairing['code'], pairing['expires']))
+            assert invitation['address'] == url and invitation['code'] == pairing['code']
+            report['checks'].append('Bundled expiring connection invitation encoded and decoded')
             runtime = check_runtime()
             if runtime['state'] == 'ready':
-                pairing = call('/api/desktop/pairing')['code']
-                response = requests.post(url + '/api/pair', json={'code': pairing, 'name': 'Packaged smoke worker', 'cpu': 1, 'memory_mb': 256}, timeout=3)
+                response = requests.post(invitation['address'] + '/api/pair', json={'code': invitation['code'], 'name': 'Packaged smoke worker', 'cpu': 1, 'memory_mb': 256}, timeout=3)
                 response.raise_for_status(); worker = response.json()
                 reference = 'smoke:' + worker['worker_id']; save(reference, worker['credential'])
                 service = root / 'worker'; service.mkdir()

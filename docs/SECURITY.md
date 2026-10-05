@@ -1,9 +1,23 @@
-# Trusted private-LAN deployment
+# Trusted private-network deployment
 
-DistributedExec V1 runs **trusted scripts from trusted users on a private LAN**. It is not a public
+DistributedExec runs **trusted scripts from trusted users on a private network**. It is not a public
 untrusted-code execution service. Plain HTTP does not encrypt credentials, scripts, datasets or outputs.
 Do not expose the host to the internet, forward its port, or expose Docker on unauthenticated TCP.
-The app never silently changes firewall settings, installs Docker or enables startup on login.
+The app never silently changes firewall settings or enables startup on login. Docker and Tailscale
+setup require an explicit launcher action and leave vendor setup, sign-in and any OS prompts visible.
+
+Version 1.2.0 adds guided Tailscale connectivity for computers on different networks. The host binds
+only its approved Tailscale IPv4 address plus loopback in this mode. Application HTTP traffic between
+Tailscale devices travels through the encrypted private network; HTTP on a plain LAN remains
+unencrypted. Network access still depends on the user's Tailscale access policies and local firewall.
+The app does not enable public sharing, exit nodes, subnet routing, port forwarding or account switching.
+Tailscale remains installed and under the user's control when DistributedExec closes or is removed.
+
+Connection invitations are bounded, expiring encodings of the host address, pairing code and expiry.
+They contain no worker credential or owner secret, and should be shared privately because anyone with
+network access can pair while the code is valid. They do not grant membership of a Tailscale network;
+workers must join the same approved private network separately. Invitation expiry and rotation are
+enforced by the coordinator as well as checked by the launcher. A changed/rotated code may fail earlier.
 
 Worker pairing codes expire after ten minutes, can be rotated in the native launcher, and are limited to
 five attempts per source IP per minute. Pairing creates unique thirty-day credentials, stored hashed by

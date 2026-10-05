@@ -52,3 +52,27 @@ def test_artifact_symlink(api, tmp_path):
     except OSError:
         pytest.skip('Windows symlink privilege unavailable')
     assert api.get(f'/api/jobs/{job}/result', headers=headers).status_code == 400
+
+
+@pytest.mark.parametrize('allowed_hosts', [None, ['[::1]'], ['::1']])
+def test_ipv6_loopback_host_is_approved(tmp_path, allowed_hosts):
+    app = create_app(tmp_path, 'admin-test', allowed_hosts)
+    with TestClient(app) as client:
+        assert client.get('/health', headers={'host': '[::1]:8000'}).status_code == 200
+        assert client.get('/health', headers={'host': '[2001:db8::1]:8000'}).status_code == 400
+
+
+@pytest.mark.parametrize('body,field', [
+    ('{"code":"x","dataset":[NaN]}', 'dataset'),
+    ('{"code":"x","dataset":[1e400]}', 'dataset'),
+    ('{"code":"x","dataset":[],"cpu":NaN}', 'cpu'),
+])
+def test_nonfinite_numbers_return_field_validation_errors(tmp_path, body, field):
+    app = create_app(tmp_path, 'admin-test', ['testserver'])
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post('/api/run', content=body,
+            headers={'authorization': 'Bearer admin-test', 'content-type': 'application/json'})
+        assert response.status_code == 422
+        assert response.json()['detail'][0]['loc'] == ['body', field]
+        assert response.json()['detail'][0]['msg']
+        assert client.get('/health').status_code == 200

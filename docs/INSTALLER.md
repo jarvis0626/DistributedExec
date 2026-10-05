@@ -1,6 +1,6 @@
 # Windows installer
 
-Version 1.1.0 ships as `DistributedExec-1.1.0-windows-x64-setup.exe`, a single compressed Inno Setup installer around the bundled PyInstaller application. Users need no Python, pip, source checkout or ZIP extraction. The installer installs into `%LOCALAPPDATA%\Programs\DistributedExec`, creates a Start menu shortcut, optionally adds a desktop shortcut and registers an uninstaller. Windows x64 build 19045 or later is required for the app; Docker's own supported Windows/WSL requirements also apply for compute. ARM-native Docker setup is not supported by this x64 installer.
+Version 1.2.0 ships as `DistributedExec-1.2.0-windows-x64-setup.exe`, a single compressed Inno Setup installer around the bundled PyInstaller application. Users need no Python, pip, source checkout or ZIP extraction. The installer installs into `%LOCALAPPDATA%\Programs\DistributedExec`, creates a Start menu shortcut, optionally adds a desktop shortcut and registers an uninstaller. Windows x64 build 19045 or later is required for the app; Docker's own supported Windows/WSL requirements also apply for compute. ARM-native Docker setup is not supported by this x64 installer.
 
 The optional compute task launches `DistributedExec.exe gui --setup-compute`. It is off by default, and the same action is available from the launcher at any time. A ready local Docker runtime returns immediately. Existing Docker Desktop is started and reused. If missing, the app streams the official Docker Desktop amd64 installer over HTTPS to a per-user cache, enforces a 1 GiB ceiling, validates download length and verifies Windows Authenticode status `Valid` with the `Docker Inc` organization before running it. A cached download is reverified. Incomplete, cancelled or invalid downloads are removed. Concurrent downloads are locked.
 
@@ -8,11 +8,21 @@ The official installer runs as `install --user` with its UI visible. No silent i
 
 Install and uninstall operate on app binaries and shortcuts. Per-user workspaces, settings, runtime approvals, credentials and Docker are preserved. Updates retain user data. No login startup, firewall rule or scheduled task is created. Setup and app are unsigned; the separately downloaded Docker installer is vendor signed.
 
+Tailscale is optional and installed separately only when a user chooses Install Tailscale for
+different-network connectivity. The app verifies the official vendor signature and opens the
+normal setup wizard. Uninstall preserves that separately installed client and its account state.
+See [cross-network setup](REMOTE_CONNECTIVITY.md) for sign-in and pairing instructions.
+
 ## Building and releasing
 
 `tools/build_windows.ps1` builds/tests the application, calls `tools/build_installer.ps1`, and runs `tools/installer_smoke.py`. The compiler bootstrap uses official Inno Setup 6.7.3 with a fixed SHA256 and verifies its Pyrsys B.V. signature. The compiler is a developer build dependency only, never an end-user prerequisite. An existing installed DistributedExec causes installer smoke to refuse operation; use a clean build account instead of overwriting that installation.
 
-The GitHub workflow uploads the installer and checksum. To create a release, download the build artifact, extract it as the release maintainer and attach the setup EXE and optional checksum to the release. Users download the EXE directly. The workflow intentionally does not create or publish releases on each push.
+The GitHub workflow uploads the installer and checksum. Users download the EXE directly from the
+[version 1.2.0 release](https://github.com/jarvis0626/DistributedExec/releases/tag/v1.2.0).
+The workflow does not publish on each push. Maintainers can use `tools/publish_release.py check`,
+`prepare`, and `publish` with an explicit repository, tag, pushed commit, installer and release-note
+file. The helper checks the local checksum, uploaded GitHub digests and exact release commit before
+publishing the prepared draft; it reads existing Git credentials without writing tokens to disk.
 
 ## Verification limits
 

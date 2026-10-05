@@ -7,7 +7,8 @@
 - [x] E: Windows onedir build, automated acceptance checks, documentation and handoff.
 - [x] F: Single Windows installer, optional automated Docker download/setup, release-ready EXE.
 
-Each major milestone is committed and pushed to origin/main as requested. No release publication.
+Milestones are committed and pushed to origin/main as requested. Version 1.2.0 also publishes the
+Windows installer and checksum as a GitHub Release.
 
 ## Baseline (2026-10-05)
 
@@ -66,3 +67,33 @@ and existing-runtime reuse passed on this machine. The installer build and isola
 uninstall smoke passed, including installed packaged host/worker execution and preservation of user data.
 The release EXE is about 45 MiB. GitHub Actions now uploads the setup EXE and SHA256 checksum.
 First-time Docker/WSL setup and restart handling remain clean-machine manual acceptance items.
+
+## Milestone G verification
+
+Version 1.1.1 improves onboarding, field validation, upload handling, connection recovery, progress,
+retry guidance, responsive dashboard layout, launcher controls and saved-worker reconnection.
+Default network selection prefers an active OS-route address and omits disconnected adapters.
+Fixed a reproduced Windows state-file replacement crash using separate atomic staging files and
+bounded sharing-error retries. Also fixed IPv6 host approval, Unicode byte quotas and nonfinite
+numeric inputs returning HTTP 500 instead of field validation errors.
+
+83 source tests passed in disjoint final runs: 72 non-browser, eight browser (including real Docker)
+and three later network-selection regressions. Real mid-chunk failure recovery, desktop/mobile
+previews, dependency checks, syntax/compilation and whitespace checks passed. Rebuilt the packaged
+application and version 1.1.1 installer; packaged and installed real-Docker execution passed.
+Isolated install/reinstall/uninstall preserved user data. The installer is about 45 MiB and its
+SHA256 checksum was verified. See docs/VERIFICATION.md for evidence and remaining manual LAN/setup checks.
+
+## Milestone H verification
+
+Version 1.2.0 adds guided private connections between computers on different Wi-Fi networks through
+Tailscale, optional signed vendor setup, explicit account sign-in, safe readiness/device discovery,
+and expiring one-field worker invitations. The host binds only its approved private address plus
+loopback; saved remote reconnect checks that connection. Provider membership remains separate from
+DistributedExec pairing. Existing accounts and routing preferences are preserved.
+
+207 tests passed in the final full run. Packaged invitation pairing and real-Docker computation
+passed. Isolated installer install/upgrade/uninstall and installed Docker execution passed while
+preserving the user's running app, registered installation and per-user data. The setup EXE and
+adjacent SHA256 checksum were verified. Detailed evidence is recorded in docs/VERIFICATION.md.
+Physical two-computer, two-network provider setup and routing remain manual acceptance items.

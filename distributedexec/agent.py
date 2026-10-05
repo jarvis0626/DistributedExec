@@ -3,6 +3,7 @@ import json
 import logging
 import threading
 import time
+import uuid
 from pathlib import Path
 import requests
 from .credentials import load
@@ -15,9 +16,20 @@ LOG = logging.getLogger(__name__)
 
 
 def write_json(path, value):
-    staging = path.with_suffix('.tmp')
-    private_file(staging, encode(value))
-    staging.replace(path)
+    staging = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
+    try:
+        private_file(staging, encode(value))
+        for attempt in range(6):
+            try:
+                staging.replace(path)
+                return
+            except OSError as exc:
+                # Windows readers can briefly deny replacement; retain the last complete file.
+                if getattr(exc, 'winerror', None) not in (5, 32, 33) or attempt == 5:
+                    raise
+                time.sleep(.02 * (attempt + 1))
+    finally:
+        staging.unlink(missing_ok=True)
 
 
 class Agent:

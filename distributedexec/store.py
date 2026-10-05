@@ -111,8 +111,8 @@ class Store:
         return one(conn, '''SELECT
             (SELECT COALESCE(SUM(LENGTH(payload)),0) FROM jobs) +
             (SELECT COALESCE(SUM(LENGTH(data)+COALESCE(LENGTH(result),0)),0) FROM chunks) +
-            (SELECT COALESCE(SUM(LENGTH(text)),0) FROM logs) +
-            (SELECT COALESCE(SUM(LENGTH(message)),0) FROM events) +
+            (SELECT COALESCE(SUM(LENGTH(CAST(text AS BLOB))),0) FROM logs) +
+            (SELECT COALESCE(SUM(LENGTH(CAST(message AS BLOB))),0) FROM events) +
             (SELECT COALESCE(SUM(size),0) FROM artifacts) AS size''')['size']
 
     def submit(self, req, key=None, parent=None):
@@ -308,7 +308,7 @@ class Store:
                     raise Conflict('Log sequence reused with different content')
                 return
             self.attempt(conn, credential, attempt, token)
-            size = one(conn, 'SELECT COALESCE(SUM(LENGTH(text)),0) AS n FROM logs WHERE attempt_id=:a', a=attempt)['n']
+            size = one(conn, 'SELECT COALESCE(SUM(LENGTH(CAST(text AS BLOB))),0) AS n FROM logs WHERE attempt_id=:a', a=attempt)['n']
             if size + len(req.text.encode('utf-8')) > self.limits.attempt_log_bytes or self.storage_size(conn) + len(req.text.encode('utf-8')) > self.limits.workspace_bytes:
                 raise Conflict('Attempt log limit reached')
             run(conn, 'INSERT INTO logs VALUES (:a,:s,:stream,:text,:t)', a=attempt, s=req.seq, stream=req.stream, text=req.text, t=self.clock())
