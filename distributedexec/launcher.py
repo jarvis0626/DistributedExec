@@ -69,6 +69,7 @@ class Launcher(QWidget):
         self.profile = None
         self.pairing = None
         self.runtime = {}
+        self.setup_running = False
         self.status = {}
         self.polling = False
         self.starting = False
@@ -127,10 +128,14 @@ class Launcher(QWidget):
         runtime_buttons = QHBoxLayout()
         self.button(runtime_buttons, 'Check again', self.check_docker)
         self.prepare_button = self.button(runtime_buttons, 'Prepare runtime', self.prepare)
-        self.button(runtime_buttons, 'Cancel preparation', lambda: self.cancel_prepare.set())
-        self.button(runtime_buttons, 'Docker setup', lambda: webbrowser.open('https://docs.docker.com/desktop/setup/install/windows-install/'))
+        self.button(runtime_buttons, 'Cancel setup', lambda: self.cancel_prepare.set())
+        self.setup_button = self.button(runtime_buttons, 'Set up compute', self.setup_compute)
+        self.button(runtime_buttons, 'Setup help', lambda: webbrowser.open('https://docs.docker.com/desktop/setup/install/windows-install/'))
         self.button(runtime_buttons, 'Linux setup', lambda: webbrowser.open('https://docs.docker.com/engine/install/'))
         runtime_layout.addLayout(runtime_buttons)
+        setup_hint = QLabel('Set up compute downloads Docker if missing, opens its setup, then prepares the runtime. Existing Docker is reused.')
+        setup_hint.setWordWrap(True)
+        runtime_layout.addWidget(setup_hint)
         layout.addWidget(runtime_box)
 
         worker_box = QGroupBox('Join as a worker')
@@ -329,10 +334,14 @@ class Launcher(QWidget):
 
     def set_runtime(self, value):
         self.runtime = value
+        if self.setup_running:
+            return
         self.runtime_label.setText(f'{value["state"].capitalize()}: {value["message"]}')
         self.endpoint_label.setText(f'Selected context: {value.get("context", "unavailable")} · endpoint: {value.get("endpoint", "unavailable")}')
 
     def prepare(self):
+        if self.setup_running:
+            return
         if not self.runtime.get('endpoint'):
             self.message('Start Docker Desktop in Linux-container mode, then Check again.'); return
         self.cancel_prepare.clear(); self.prepare_button.setEnabled(False)
@@ -342,6 +351,24 @@ class Launcher(QWidget):
         def failed(error):
             self.prepare_button.setEnabled(True); self.runtime_label.setText('Failed: ' + error); self.message(error)
         self.action(lambda progress: prepare_runtime(self.runtime['endpoint'], progress, self.cancel_prepare), finished, failed)
+
+    def setup_compute(self):
+        if self.setup_running or not self.prepare_button.isEnabled():
+            return
+        from .setup import setup_compute
+        self.setup_running = True
+        self.cancel_prepare.clear()
+        self.setup_button.setEnabled(False); self.prepare_button.setEnabled(False)
+        def restore():
+            self.setup_running = False
+            self.setup_button.setEnabled(True); self.prepare_button.setEnabled(True)
+        def finished(value):
+            restore(); self.set_runtime(value); self.message('Compute setup complete.')
+        def failed(error):
+            restore(); self.runtime_label.setText(error); self.message(error)
+        def progress(value):
+            self.runtime_label.setText(value.strip()); self.message(value)
+        self.action(lambda report: setup_compute(report, self.cancel_prepare), finished, failed, progress)
 
     def tick(self):
         for mode in ('host', 'worker'):
@@ -430,8 +457,10 @@ class Launcher(QWidget):
         self.message('Stopping owned services and containers…')
 
 
-def launch():
+def launch(setup_compute=False):
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName('DistributedExec')
     window = Launcher(); window.show()
+    if setup_compute:
+        QTimer.singleShot(250, window.setup_compute)
     return app.exec()

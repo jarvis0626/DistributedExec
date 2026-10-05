@@ -4,13 +4,13 @@ A Windows-first desktop application for running trusted Python functions across 
 
 ## For normal users
 
-1. Extract the entire **DistributedExec** Windows folder from the build artifact. Open **DistributedExec.exe**. Keep its `_internal` folder alongside it; do not copy just the executable.
+1. Download and open **DistributedExec-1.1.0-windows-x64-setup.exe**. It installs the app for your Windows account, including Python and all application libraries, and creates a Start menu shortcut. No ZIP extraction, Python or pip setup is needed.
 2. Choose **Host a workspace**, select your LAN interface and a free port. The browser dashboard opens automatically. The launcher displays the host address and a pairing code that expires after ten minutes. **Hosting requires no Docker or Python installation.**
-3. To contribute compute, install [Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/), choose WSL2 and Linux containers, then start Docker. For Linux use [Docker Engine](https://docs.docker.com/engine/install/). On a worker computer open DistributedExec, **Check again**, then **Prepare runtime**. The bundled standard-library runtime needs internet for its first preparation; no Git checkout is required.
+3. To contribute compute, select **Set up compute** in the installer or launcher. It reuses existing Docker; otherwise it downloads Docker Desktop from its official HTTPS service, verifies Docker Inc's Windows signature and opens the vendor installer. Complete Docker's welcome/setup screens; Windows may need WSL2, hardware virtualization enabled or a restart. The app then prepares its compute runtime automatically. Cancel setup stops our download/wait; an already-open Docker installer remains under your control. For Linux use [Docker Engine](https://docs.docker.com/engine/install/) and **Prepare runtime**. First compute setup needs internet; no Git checkout is required.
 4. Choose **Join as a worker**. Enter the host address and pairing code, name your computer, and choose CPU/RAM/concurrency budgets. Enable **Also contribute compute while hosting** explicitly if one computer should do both.
 5. In the dashboard, choose an example, edit `def task(data): ...`, provide a JSON array or drop a JSON file, and execute. Inspect jobs, accepted progress, attempts, errors and live logs. Download the full ordered JSON result. **Clear file** restores manual dataset editing.
 
-Docker is a separate prerequisite only for compute machines. WSL2 and hardware virtualization must work; see [Docker's WSL2 setup](https://docs.docker.com/desktop/features/wsl/). Preparation builds an approved image from a digest-pinned Python base. Monaco, its loader/fonts and notices are bundled locally. After preparation, the app and jobs can operate offline on the LAN.
+Docker is downloaded only for compute machines that need it; its installer is cached for retries and signature-checked again before reuse. Its own terms and Windows setup remain visible; the app does not accept agreements or restart Windows automatically. WSL2 and hardware virtualization must work; see [Docker's WSL2 setup](https://docs.docker.com/desktop/features/wsl/). Preparation builds an approved image from a digest-pinned Python base. Monaco, its loader/fonts and notices are bundled locally. After preparation, the app and jobs can operate offline on the LAN. Uninstall removes application files and shortcuts while preserving your workspaces, settings, credentials and Docker.
 
 The launcher supports pause-new-work, graceful disconnect, stop-now, saved-worker reconnection, pairing rotation, worker revocation, opening logs and redacted diagnostics. It owns its service processes and shuts them down deliberately. Credentials use the OS credential store when available. Configuration, logs and workspaces live in per-user directories, never the installed app folder. No auto-start on login or automatic firewall changes.
 
@@ -31,7 +31,7 @@ See [architecture and state transitions](docs/ARCHITECTURE.md), [clean-machine a
 
 ## Find or build the executable
 
-Windows build artifacts are uploaded by the repository's [Windows build workflow](https://github.com/jarvis0626/DistributedExec/actions/workflows/windows-build.yml); sign in to GitHub to download the whole onedir artifact. The workflow does not publish releases. A local build writes `dist/DistributedExec/DistributedExec.exe`.
+The repository's [Windows build workflow](https://github.com/jarvis0626/DistributedExec/actions/workflows/windows-build.yml) uploads **DistributedExec-windows-installer**, containing the single setup EXE and its SHA256 checksum. GitHub wraps workflow artifacts in ZIPs for developers; attach the **setup EXE itself** to a GitHub Release so users download and run that one file. The workflow does not publish releases automatically. A local build writes `dist/DistributedExec-1.1.0-windows-x64-setup.exe` and its `.sha256` file; the intermediate app folder remains at `dist/DistributedExec/`.
 
 For developers on Windows with Python 3.12, run:
 
@@ -39,7 +39,7 @@ For developers on Windows with Python 3.12, run:
 powershell -ExecutionPolicy Bypass -File tools/build_windows.ps1
 ```
 
-The script creates a build environment if needed, installs pinned dependencies, collects license notices, runs host-only checks, builds the windowless PyInstaller onedir application and smoke-tests it. This execution-policy override applies only to the build script process; normal users simply open the executable. The build is unsigned and Windows may show an OS reputation warning. Verify the source/build provenance; do not disable antivirus.
+The script creates a build environment if needed, installs pinned dependencies, collects license notices, runs host-only checks, builds and smoke-tests the windowless PyInstaller application, then provisions the checksum-pinned, signature-verified Inno Setup 6.7.3 build tool. It compiles a compressed per-user installer and verifies installation, packaged execution, reinstall and uninstall in a temporary directory. This installer smoke requires an account without an existing installed DistributedExec so it cannot overwrite a user's app. See [installer design and verification](docs/INSTALLER.md). This execution-policy override applies only to the build script process; normal users simply open the setup executable. The app installer is unsigned and Windows may show an OS reputation warning. Verify the source/build provenance; do not disable antivirus.
 
 ## Developer commands
 
@@ -64,7 +64,8 @@ The benchmark compares the same PBKDF2 workload and verifies full result equalit
 
 ## Troubleshooting
 
-- **Missing/stopped Docker:** hosting still works. Install/start Docker only to contribute compute, then Check again.
+- **Missing/stopped Docker:** hosting still works. Select Set up compute to download/install or start Docker and prepare the runtime. Finish any vendor screens/restart, then select it again if needed.
+- **Docker download/signature failure:** setup installs nothing. Check internet access and Windows certificate/time settings, then retry Set up compute. Setup help links to Docker's official instructions.
 - **Wrong mode:** select Linux containers in Docker Desktop. Windows containers are unsupported.
 - **Preparation failed:** read the displayed error/logs, check internet access and the selected local Docker context, then retry. Cancellation does not delete unrelated images/containers; a daemon-side intermediate build may continue until Docker notices the connection closed.
 - **Remote Docker context:** V1 accepts only local named-pipe/Unix-socket endpoints. Select a local context before pairing; reconnect refuses to silently switch endpoints.

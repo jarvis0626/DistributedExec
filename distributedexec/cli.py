@@ -60,12 +60,13 @@ def main(argv=None):
     pair.add_argument('--memory-mb', type=int, default=1024)
     pair.add_argument('--concurrency', type=int, default=1)
     sub.add_parser('check-runtime')
-    sub.add_parser('gui')
+    gui = sub.add_parser('gui')
+    gui.add_argument('--setup-compute', action='store_true')
     sub.add_parser('smoke')
     args = parser.parse_args(argv)
     if args.mode in (None, 'gui'):
         from .launcher import launch
-        return launch()
+        return launch(setup_compute=getattr(args, 'setup_compute', False))
     configure_logging(args.mode)
     if args.mode == 'smoke':
         from .smoke import smoke

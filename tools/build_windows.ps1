@@ -19,3 +19,6 @@ $builtExecutable = Join-Path $projectRoot 'dist\DistributedExec\DistributedExec.
 $smokeProcess = Start-Process -FilePath $builtExecutable -ArgumentList 'smoke' -WindowStyle Hidden -Wait -PassThru
 if ($smokeProcess.ExitCode -ne 0) { throw 'Packaged application smoke test failed; see per-user logs' }
 Write-Output "Built and smoke-tested: $builtExecutable"
+& (Join-Path $PSScriptRoot 'build_installer.ps1') -Python $buildPython
+& $buildPython tools/installer_smoke.py
+if ($LASTEXITCODE -ne 0) { throw 'Installer install/uninstall smoke test failed' }

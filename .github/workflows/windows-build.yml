@@ -21,7 +21,9 @@ jobs:
         run: ./tools/build_windows.ps1
       - uses: actions/upload-artifact@v4
         with:
-          name: DistributedExec-windows-onedir
-          path: dist/DistributedExec/
+          name: DistributedExec-windows-installer
+          path: |
+            dist/DistributedExec-*-windows-x64-setup.exe
+            dist/DistributedExec-*-windows-x64-setup.exe.sha256
           if-no-files-found: error
           include-hidden-files: true

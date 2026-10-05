@@ -1,5 +1,23 @@
 # Verification evidence (2026-10-05)
 
+## Version 1.1.0 installer update
+
+- Full source suite: **44 passed**; host-only build suite: **30 passed**, 14 excluded.
+- `tools/build_windows.ps1`: passed bundled application build/smoke, verified Inno compiler bootstrap,
+  installer compilation and isolated install/reinstall/uninstall smoke.
+- Single installer: `dist/DistributedExec-1.1.0-windows-x64-setup.exe`, 46,850,265 bytes (about 45 MiB),
+  with adjacent SHA256 checksum.
+- Installed EXE smoke executed the packaged host and worker with the real Linux Docker runtime.
+- The uninstall test verified removal of installed app files and preservation of per-user data.
+- Docker bootstrap verified the actual Docker Inc Authenticode signature on the previously downloaded
+  vendor installer. Running Set up compute reused this machine's approved Docker without any download.
+- Mocked download tests cover caching, truncation, cancellation, unsigned payloads, wrong publishers,
+  redirect rejection and starting/preparing an existing stopped Docker installation.
+- First-time Docker/WSL installation, welcome screens, UAC/reboots and physical LAN use remain manual
+  checks on a clean machine. The app installer is unsigned; Windows reputation prompts may appear.
+
+## Version 1.0 baseline evidence
+
 Environment: Windows 11 x64, Python 3.12.3, Docker Desktop selected `desktop-linux` context,
 Linux engine 29.8.1, WSL2. The user installed and started Docker Desktop during implementation.
 

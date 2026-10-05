@@ -5,6 +5,7 @@
 - [x] C: Concurrent scheduling, renewable leases, recovery, logs, revocation and cancellation.
 - [x] D: Native launcher, Docker onboarding, offline browser dashboard.
 - [x] E: Windows onedir build, automated acceptance checks, documentation and handoff.
+- [x] F: Single Windows installer, optional automated Docker download/setup, release-ready EXE.
 
 Each major milestone is committed and pushed to origin/main as requested. No release publication.
 
@@ -54,3 +55,14 @@ built the onedir distribution, and ran the packaged smoke test successfully with
 The benchmark checked equivalent local/distributed result equality and reported startup/transfer overhead.
 Open dist/DistributedExec/DistributedExec.exe; keep the complete folder. Detailed evidence and remaining
 clean-machine/manual acceptance limits are in docs/VERIFICATION.md. No release or public deployment.
+
+## Milestone F verification
+
+Version 1.1.0 adds a per-user setup EXE bundling Python and application libraries. The optional compute
+step downloads a signature-verified official Docker installer only if needed, opens its vendor UI,
+and prepares the compute runtime after Docker starts. Existing ready Docker requires no downloads.
+Full suite: 44 passed. Host-only build suite: 30 passed, 14 excluded. Real Docker publisher verification
+and existing-runtime reuse passed on this machine. The installer build and isolated install/reinstall/
+uninstall smoke passed, including installed packaged host/worker execution and preservation of user data.
+The release EXE is about 45 MiB. GitHub Actions now uploads the setup EXE and SHA256 checksum.
+First-time Docker/WSL setup and restart handling remain clean-machine manual acceptance items.
