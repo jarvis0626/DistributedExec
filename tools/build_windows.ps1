@@ -1,9 +1,10 @@
+param([string]$Python = 'python')
 $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location -LiteralPath $projectRoot
 $buildPython = Join-Path $projectRoot '.venv\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $buildPython)) {
-    py -3.12 -m venv .venv
+    & $Python -m venv .venv
     if ($LASTEXITCODE -ne 0) { throw 'Creating the Python 3.12 build environment failed' }
 }
 & $buildPython -m pip install -r requirements-lock.txt

@@ -24,6 +24,11 @@ Local executable: `dist/DistributedExec/DistributedExec.exe`. The complete folde
 Smoke evidence is written in the per-user logs folder: smoke-report.json, launcher-smoke.png and service logs.
 The repeatable failure demo's local report is deliberately gitignored because it contains local machine/workspace metadata.
 
+The first GitHub Actions run exposed a prototype repository issue: `.venv` was tracked with a
+machine-specific `C:\Python312` interpreter path. The environment was removed from Git tracking
+without deleting the local files. Fresh CI builds now create their environment with the interpreter
+selected by actions/setup-python on PATH; the build script also accepts an explicit `-Python` path.
+
 ## Coverage and limitations
 
 SQLite checks cover empty/invalid input, concurrent ownership, CPU/RAM/concurrency reservations, priority,
