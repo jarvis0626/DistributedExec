@@ -207,6 +207,11 @@ def create_app(workspace, admin_token, allowed_hosts=None, shutdown=None):
                 id=job, j=job, p=path.name, s=len(payload), h=digest(payload))
         return FileResponse(path, media_type='application/json', filename=f'DistributedExec-{job}.json')
 
+    @app.get('/api/jobs/{job}/preview', dependencies=[Depends(admin)])
+    def preview(job: str):
+        value = store.result(job)
+        return {'items': value[:10], 'total_items': len(value)}
+
     @app.get('/api/jobs/{job}/logs', dependencies=[Depends(admin)])
     def logs(job: str, after: int = 0):
         store.job(job)

@@ -1,0 +1,15 @@
+{
+  "package": "monaco-editor",
+  "version": "0.52.2",
+  "shasum": "53c75a6fcc6802684e99fd1b2700299857002205",
+  "tarball": "https://registry.npmjs.org/monaco-editor/-/monaco-editor-0.52.2.tgz",
+  "fileCount": 1467,
+  "integrity": "sha512-GEQWEZmfkOGLdd3XK8ryrfWz3AIP8YymVXiPHEdewrUq7mh0qrKrfHLNCXcbB6sTnMLnOZ3ztSiKcciFUkIJwQ==",
+  "signatures": [
+    {
+      "sig": "MEQCIFOSxVnp/4bRN8CqUyLFOX8N/UZYPuBcnP0EwfwrOu/XAiA0cmTssd4+78FpAzpc/7U5Zdke3QuwFho2ICE2aYqmFg==",
+      "keyid": "SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA"
+    }
+  ],
+  "unpackedSize": 98831340
+}

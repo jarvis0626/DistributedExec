@@ -3,7 +3,7 @@
 - [x] A: Inspect prototype and local changes; capture ordered result contract and empty-input defect.
 - [x] B: Durable SQLite coordinator, authenticated transfer, isolated Docker execution, ordered downloads.
 - [x] C: Concurrent scheduling, renewable leases, recovery, logs, revocation and cancellation.
-- [ ] D: Native launcher, Docker onboarding, offline browser dashboard.
+- [x] D: Native launcher, Docker onboarding, offline browser dashboard.
 - [ ] E: Windows onedir build, automated acceptance checks, documentation and handoff.
 
 Each major milestone is committed and pushed to origin/main as requested. No release publication.
@@ -34,3 +34,12 @@ attempt retained. The repeat run exited successfully, including Windows read-onl
 Heartbeats, live log replay and the local lease safety watchdog run in independent threads.
 Output/log limits and resource-aware claims are enforced; deterministic errors fail without retry.
 Additional SQLite tests exercise cancellation/completion and cancellation/reaper races.
+
+## Milestone D verification
+
+The Windows Qt launcher starts actual host/worker service processes and supports setup, pairing,
+resource budgets, pause/resume/drain/stop, saved reconnection, simultaneous hosting/compute,
+pairing rotation/revocation and diagnostics. Its widget tests use Windows Qt's offscreen platform.
+Headless Edge browser tests blocked all external requests and verified locally bundled Monaco,
+upload clearing, a working text fallback, queued jobs, empty output preview/download and onboarding.
+`python -m pytest -q`: 30 passed. `node --check static/app.js`: passed.

@@ -52,6 +52,13 @@ def main(argv=None):
     worker.add_argument('--owner-pid', type=int)
     runtime = sub.add_parser('prepare-runtime')
     runtime.add_argument('--endpoint')
+    pair = sub.add_parser('pair')
+    pair.add_argument('--host', required=True)
+    pair.add_argument('--code')
+    pair.add_argument('--name', default=socket.gethostname())
+    pair.add_argument('--cpu', type=float, default=2)
+    pair.add_argument('--memory-mb', type=int, default=1024)
+    pair.add_argument('--concurrency', type=int, default=1)
     sub.add_parser('check-runtime')
     sub.add_parser('gui')
     sub.add_parser('smoke')
@@ -72,6 +79,33 @@ def main(argv=None):
     if args.mode == 'prepare-runtime':
         from .runtime import prepare_runtime, selected_endpoint
         prepare_runtime(args.endpoint or selected_endpoint()[1], lambda p: print(p) if sys.stdout else None)
+        return 0
+    if args.mode == 'pair':
+        import getpass
+        from urllib.parse import urlsplit
+        from .models import PairRequest
+        from .credentials import save
+        from .runtime import check_runtime
+        from .agent import write_json
+        address = args.host.rstrip('/')
+        url = urlsplit(address)
+        if url.scheme not in ('http', 'https') or not url.hostname or url.username or url.password or url.path or url.query or url.fragment:
+            raise RuntimeError('Use a host URL without a path or credentials')
+        runtime = check_runtime()
+        if runtime['state'] != 'ready':
+            raise RuntimeError(runtime['message'])
+        request = PairRequest(code=args.code or getpass.getpass('Pairing code: '), name=args.name, cpu=args.cpu, memory_mb=args.memory_mb, concurrency=args.concurrency)
+        response = requests.post(address + '/api/pair', json=request.model_dump(), timeout=(3, 5))
+        response.raise_for_status()
+        worker = response.json()
+        reference = 'worker:' + worker['worker_id']
+        save(reference, worker['credential'])
+        directory = data_dir() / 'workers' / worker['worker_id']
+        profile = directory / 'profile.json'
+        write_json(profile, {'host': address, 'worker_id': worker['worker_id'], 'credential_ref': reference,
+            'endpoint': runtime['endpoint'], 'service_dir': str(directory), 'concurrency': args.concurrency})
+        if sys.stdout:
+            print(f'Paired. Start with: python worker.py --config "{profile}"')
         return 0
     if args.mode == 'worker':
         from .agent import Agent

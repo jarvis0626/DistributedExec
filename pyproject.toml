@@ -21,4 +21,4 @@ include = ["distributedexec*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["docker: requires a prepared local Linux Docker runtime"]
+markers = ["docker: requires a prepared local Linux Docker runtime", "browser: requires Playwright and an installed Edge/Chromium browser"]
