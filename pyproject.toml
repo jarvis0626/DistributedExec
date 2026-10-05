@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools==84.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "DistributedExec"
+version = "1.0.0"
+description = "Desktop trusted-LAN Python chunk execution"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi==0.135.3", "uvicorn==0.44.0", "requests==2.33.1",
+  "SQLAlchemy==2.1.3", "docker==7.2.0", "platformdirs==4.12.3",
+  "filelock==4.0.11", "keyring==25.7.0", "PySide6==6.11.2", "psutil==7.2.2",
+]
+
+[project.scripts]
+distributedexec = "distributedexec.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["distributedexec*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["docker: requires a prepared local Linux Docker runtime"]
