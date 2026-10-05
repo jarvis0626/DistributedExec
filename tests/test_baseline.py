@@ -1,6 +1,7 @@
 """Prototype contract, replaced with durable regression tests in milestone B."""
 import asyncio
 import unittest
+from types import SimpleNamespace
 import host
 
 
@@ -21,7 +22,7 @@ class Baseline(unittest.TestCase):
         job = asyncio.run(host.run_job(host.RunRequest(code='def task(data): return data', dataset=[1, 2, 3, 4])))
         for index, result in [(1, [3, 4]), (0, [1, 2])]:
             asyncio.run(host.submit_result(host.WorkerResult(job_id=job['job_id'], chunk_id=index,
-                worker_id='0', result=result, execution_time=0), None))
+                worker_id='0', result=result, execution_time=0), SimpleNamespace(client=SimpleNamespace(host='127.0.0.1'))))
         self.assertEqual(host.jobs[job['job_id']]['final_result'], [1, 2, 3, 4])
 
     @unittest.expectedFailure
