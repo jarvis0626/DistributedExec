@@ -102,3 +102,36 @@ def test_end_to_end_sqlite_container_order(executor, tmp_path):
         assert database.result(job) == [3, 6, 9, 12]
     finally:
         database.engine.dispose()
+
+
+def test_reconcile_leaves_unrelated_containers(executor):
+    from distributedexec.runtime import approved_image
+    client = client_for(executor.endpoint)
+    unrelated = owned = None
+    try:
+        image = approved_image(client, executor.endpoint)
+        unrelated = client.containers.create(image, labels={'org.distributedexec.test': 'unrelated'})
+        owned = client.containers.create(image, labels={'org.distributedexec.app': 'DistributedExec', 'org.distributedexec.worker': executor.worker_id})
+        executor.reconcile()
+        client.containers.get(unrelated.id)
+        import docker
+        with pytest.raises(docker.errors.NotFound):
+            client.containers.get(owned.id)
+    finally:
+        if unrelated: unrelated.remove(force=True)
+        client.close()
+
+
+def test_hash_mismatch_rejects_and_cleans(executor):
+    job = task('def task(data): return data')
+    job['code_hash'] = 'altered'
+    with pytest.raises(RuntimeError, match='hash mismatch'):
+        executor.execute(job, threading.Event())
+    assert list(executor.root.iterdir()) == []
+
+
+def test_standard_library_module_annotations(executor):
+    code = 'from __future__ import annotations\nfrom dataclasses import dataclass, asdict\n@dataclass\nclass Row:\n    value: int\ndef task(data):\n    return [asdict(Row(x)) for x in data]'
+    result = executor.execute(task(code), threading.Event())
+    assert result['status'] == 'succeeded', result
+    assert result['result'] == [{'value': 1}, {'value': 2}]

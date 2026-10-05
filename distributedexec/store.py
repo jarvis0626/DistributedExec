@@ -213,7 +213,7 @@ class Store:
             candidates = rows(conn, '''SELECT c.*,j.payload,j.code_hash FROM chunks c JOIN jobs j ON j.id=c.job_id
                 WHERE c.state='queued' AND c.available<=:t AND j.cancel_requested=0 AND j.status IN ('queued','running')
                 AND json_extract(j.payload,'$.cpu')<=:cpu AND json_extract(j.payload,'$.memory_mb')<=:memory
-                ORDER BY j.priority DESC,j.created,c.ordinal LIMIT 1''', t=now, cpu=cpu + .00001, memory=memory)
+                ORDER BY j.priority DESC,j.rowid,c.ordinal LIMIT 1''', t=now, cpu=cpu + .00001, memory=memory)
             for chunk in candidates:
                 spec = json.loads(chunk['payload'])
                 if spec['cpu'] > cpu + 0.00001 or spec['memory_mb'] > memory:
@@ -253,6 +253,7 @@ class Store:
     def retry_or_fail(self, conn, attempt, error):
         if attempt['attempt_count'] < MAX_ATTEMPTS:
             run(conn, "UPDATE chunks SET state='queued',current_attempt=NULL,available=:t WHERE id=:c", t=self.clock() + 2 ** attempt['attempt_count'], c=attempt['chunk_id'])
+            run(conn, "UPDATE jobs SET status='queued' WHERE id=:j AND status='running' AND NOT EXISTS (SELECT 1 FROM chunks WHERE job_id=:j AND state='running')", j=attempt['job_id'])
             self.event(conn, attempt['job_id'], 'retry_wait', error)
         else:
             run(conn, "UPDATE chunks SET state='failed' WHERE id=:c", c=attempt['chunk_id'])
@@ -288,6 +289,8 @@ class Store:
                 remaining = one(conn, "SELECT COUNT(*) AS n FROM chunks WHERE job_id=:j AND state!='succeeded'", j=attempt['job_id'])['n']
                 if not remaining:
                     run(conn, "UPDATE jobs SET status='succeeded',finished=:t WHERE id=:j AND status='running' AND cancel_requested=0", t=now, j=attempt['job_id'])
+                else:
+                    run(conn, "UPDATE jobs SET status='queued' WHERE id=:j AND status='running' AND NOT EXISTS (SELECT 1 FROM chunks WHERE job_id=:j AND state='running')", j=attempt['job_id'])
             elif req.status in ('infrastructure', 'interrupted'):
                 self.retry_or_fail(conn, attempt, req.error or req.status)
             else:
@@ -351,7 +354,7 @@ class Store:
             row = one(conn, 'SELECT * FROM jobs WHERE id=:j', j=job)
             if not row:
                 raise KeyError(job)
-            row.pop('payload')
+            spec = json.loads(row.pop('payload'))
             row.pop('idempotency_key')
             row['chunks'] = rows(conn, 'SELECT id,ordinal,state,current_attempt,attempt_count,available FROM chunks WHERE job_id=:j ORDER BY ordinal', j=job)
             row['attempts'] = rows(conn, '''SELECT a.id,a.chunk_id,a.worker_id,w.name AS worker_name,a.state,a.started,a.finished,a.lease_until,a.error,a.runtime_id,a.exit_code,a.duration
@@ -359,7 +362,20 @@ class Store:
             row['completed_chunks'] = sum(c['state'] == 'succeeded' for c in row['chunks'])
             row['total_chunks'] = len(row['chunks'])
             row['events'] = rows(conn, 'SELECT * FROM events WHERE job_id=:j ORDER BY id DESC LIMIT 100', j=job)
-            row['queued_reason'] = 'Waiting for an online worker with the runtime and sufficient available CPU/RAM, or retry backoff' if any(c['state'] == 'queued' for c in row['chunks']) else None
+            pending = [c for c in row['chunks'] if c['state'] == 'queued']
+            row['queued_reason'] = None
+            if pending:
+                earliest = min(c['available'] for c in pending)
+                online = rows(conn, 'SELECT * FROM workers WHERE heartbeat>:t AND revoked=0 AND expires>:now', t=self.clock() - LEASE_SECONDS, now=self.clock())
+                eligible = [w for w in online if w['mode'] == 'accepting' and w['runtime_id'] and w['cpu'] >= spec['cpu'] and w['memory_mb'] >= spec['memory_mb']]
+                if earliest > self.clock():
+                    row['queued_reason'] = f'Infrastructure retry backoff: next chunk eligible in {earliest - self.clock():.1f}s'
+                elif not online:
+                    row['queued_reason'] = 'Waiting for a worker to connect and heartbeat'
+                elif not eligible:
+                    row['queued_reason'] = 'Online workers are paused, missing their runtime, or have CPU/RAM budgets smaller than this job needs'
+                else:
+                    row['queued_reason'] = 'Waiting for an accepting worker to claim queued chunks; running attempts may reserve its CPU/RAM/concurrency'
             return row
 
     def status(self):
@@ -377,4 +393,5 @@ class Store:
                 worker['active_attempts'] = [a['id'] for a in active]
                 worker['reserved_cpu'] = sum(json.loads(a['payload'])['cpu'] for a in active)
                 worker['reserved_memory_mb'] = sum(json.loads(a['payload'])['memory_mb'] for a in active)
-            return {'jobs': jobs, 'workers': workers, 'server_time': self.clock()}
+            active_jobs = one(conn, "SELECT COUNT(*) AS n FROM jobs WHERE status IN ('queued','running')")['n']
+            return {'jobs': jobs, 'workers': workers, 'active_jobs': active_jobs, 'server_time': self.clock()}

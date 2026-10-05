@@ -7,6 +7,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from filelock import FileLock
 from .models import RunRequest, PairRequest, Heartbeat, Completion, LogRequest
 from .paths import assets
 from .store import Store, Conflict, digest, encode, one, rows, run, MAX_UPLOAD
@@ -195,13 +196,18 @@ def create_app(workspace, admin_token, allowed_hosts=None, shutdown=None):
         path = root / (job + '.json')
         if root.is_symlink() or path.is_symlink() or path.resolve().parent != root.resolve():
             raise HTTPException(400, 'Invalid artifact path')
-        staging = root / (secrets.token_hex(16) + '.tmp')
-        try:
-            with open(staging, 'x', encoding='utf-8') as f:
-                f.write(payload)
-            staging.replace(path)
-        finally:
-            staging.unlink(missing_ok=True)
+        with FileLock(root / (job + '.lock'), timeout=5):
+            # Completed output is immutable. Reusing the file permits concurrent Windows downloads.
+            if path.exists() and (path.stat().st_size != len(payload) or digest(path.read_text(encoding='utf-8')) != digest(payload)):
+                raise Conflict('Stored artifact is damaged; remove this artifact file while the host is stopped to regenerate it from accepted chunk results')
+            if not path.exists():
+                staging = root / (secrets.token_hex(16) + '.tmp')
+                try:
+                    with open(staging, 'x', encoding='utf-8') as f:
+                        f.write(payload)
+                    staging.replace(path)
+                finally:
+                    staging.unlink(missing_ok=True)
         with store.tx() as conn:
             run(conn, 'INSERT OR REPLACE INTO artifacts VALUES (:id,:j,:p,:s,:h)',
                 id=job, j=job, p=path.name, s=len(payload), h=digest(payload))

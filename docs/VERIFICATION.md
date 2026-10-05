@@ -3,15 +3,22 @@
 Environment: Windows 11 x64, Python 3.12.3, Docker Desktop selected `desktop-linux` context,
 Linux engine 29.8.1, WSL2. The user installed and started Docker Desktop during implementation.
 
-- `python -m pytest -q`: **30 passed**, including real Docker, Windows Qt widget and headless Edge browser checks.
+- `python -m pytest -q`: **34 passed**, including real Docker, ordinary Python module/annotation loading,
+  Windows Qt widget and headless Edge browser checks.
 - `node --check static/app.js`: passed.
+- After the final queued-state recovery adjustment, 12 targeted SQLite/race/Docker-ordering checks passed.
 - `python -m compileall -q distributedexec host.py worker.py DistributedExec.py`: passed.
 - `python tools/failure_demo.py --output local-data/failure-demo-2`: passed. Worker 1 was killed after a live
   log, its lease expired, worker 2 recovered ordered `[2,4,6,8]`, exactly two attempts succeeded and expired history remained.
 - `python -m PyInstaller --noconfirm DistributedExec.spec`: built the Windows windowless onedir distribution.
+- `powershell -ExecutionPolicy Bypass -File tools/build_windows.ps1`: passed dependency installation/checks,
+  license collection, 19 host-only acceptance tests, Windows onedir build and packaged smoke check.
 - `dist/DistributedExec/DistributedExec.exe smoke`: **exit 0**, including Qt offscreen rendering, bundled assets,
   windowless packaged coordinator, authenticated browser bootstrap, durable empty result, packaged worker,
   two real Docker chunks, live logs, ordered full download and graceful service exit.
+- Equivalent eight-item benchmark on a temporary coordinator/two-concurrent-slot worker: local 0.965s,
+  first-job 2.936s and warm-service 3.074s end-to-end. Both distributed outputs equalled the local output.
+  This small workload was slower distributed; these sample timings are not a speedup promise or controlled-cache benchmark.
 
 Local executable: `dist/DistributedExec/DistributedExec.exe`. The complete folder is required.
 Smoke evidence is written in the per-user logs folder: smoke-report.json, launcher-smoke.png and service logs.

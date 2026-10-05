@@ -98,7 +98,8 @@ def check_runtime(endpoint=None):
             return {'state': 'preparing runtime', 'message': 'Docker is ready. Select Prepare runtime.', 'endpoint': endpoint, 'context': context}
     except Exception as exc:
         installed = (Path.home() / '.docker').exists() or shutil.which('docker') is not None
-        return {'state': 'installed but stopped' if installed else 'missing', 'message': str(exc)[:1000]}
+        state = 'failed' if isinstance(exc, (RuntimeError, ValueError)) else ('installed but stopped' if installed else 'missing')
+        return {'state': state, 'message': str(exc)[:1000]}
     finally:
         if client:
             client.close()
@@ -116,7 +117,8 @@ def prepare_runtime(endpoint, progress=lambda _: None, cancel=None):
                     raise RuntimeError('Runtime preparation cancelled; existing approval is unchanged')
                 if 'error' in item:
                     raise RuntimeError(item['error'])
-                progress(item.get('stream') or item.get('status', 'Preparing runtime'))
+                detail = item.get('progressDetail', {})
+                progress(item.get('stream') or f"{item.get('id', '')} {item.get('status', 'Preparing runtime')} {detail.get('current', '')}/{detail.get('total', '')}".strip())
         finally:
             stream.close()
         if cancel and cancel.is_set():
@@ -160,13 +162,20 @@ class DockerExecutor:
         os.chmod(output_dir, 0o777)
         request = encode({'function_name': task['function_name'], 'data': task['data']})
         if digest(task['code']) != task['code_hash'] or digest(encode(task['data'])) != task['input_hash']:
+            client.close()
+            remove_attempt(path, self.root)
             raise RuntimeError('Input or code hash mismatch')
         (input_dir / 'task.py').write_text(task['code'], encoding='utf-8')
         (input_dir / 'request.json').write_text(request, encoding='utf-8')
         for file in input_dir.iterdir():
             os.chmod(file, 0o444)
         os.chmod(input_dir, 0o755)
-        image = approved_image(client, self.endpoint)
+        try:
+            image = approved_image(client, self.endpoint)
+        except Exception:
+            client.close()
+            remove_attempt(path, self.root)
+            raise
         response = {'status': 'infrastructure', 'error': 'Container failed to produce output'}
         pump = None
         try:
@@ -191,9 +200,11 @@ class DockerExecutor:
                     for stdout, stderr in stream:
                         for name, content in [('stdout', stdout), ('stderr', stderr)]:
                             if content and count < MAX_LOG:
-                                content = content[:min(16000, MAX_LOG - count)]
-                                count += len(content)
-                                log(name, content.decode('utf-8', errors='replace'))
+                                content = content[:MAX_LOG - count]
+                                for offset in range(0, len(content), 8000):
+                                    part = content[offset:offset + 8000]
+                                    count += len(part)
+                                    log(name, part.decode('utf-8', errors='replace'))
                 except Exception:
                     pass
             pump = threading.Thread(target=pump_logs, daemon=True)

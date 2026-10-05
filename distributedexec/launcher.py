@@ -352,7 +352,15 @@ class Launcher(QWidget):
                 if mode == 'host':
                     self.host_label.setText('Not hosting'); self.pair_label.setText('Pairing unavailable'); self.pairing = None
                     self.starting = False; self.host_start.setEnabled(True)
-                else: self.worker_label.setText('Disconnected')
+                else:
+                    self.worker_label.setText('Disconnected')
+                    if self.profile:
+                        try:
+                            state = json.loads((self.profile.parent / 'state.json').read_text(encoding='utf-8'))
+                            if state.get('error'):
+                                self.worker_label.setText('Disconnected: ' + redacted(state['error']))
+                                self.message(state['error'])
+                        except (OSError, ValueError): pass
                 if process.returncode:
                     path = logs_dir() / f'{mode}.log'
                     self.message(f'{mode.capitalize()} stopped with an error. ' + (path.read_text(encoding='utf-8')[-1500:] if path.exists() else 'Open logs for details.'))
@@ -395,7 +403,7 @@ class Launcher(QWidget):
 
     def stop_host(self):
         if not self.host_process: return
-        active = sum(job['status'] in ('queued', 'running') for job in self.status.get('jobs', []))
+        active = self.status.get('active_jobs', 0)
         if active and QMessageBox.question(self, 'Stop coordinator?', f'{active} jobs are queued or running. Workers will stop when their leases cannot be renewed. Jobs and cancellation history persist and eligible chunks can retry after restart. Stop hosting?') != QMessageBox.Yes:
             return
         self.action(lambda _: self.host_api('/api/desktop/shutdown'), lambda _: self.message('Coordinator shutting down; durable history is preserved.'))

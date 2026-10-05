@@ -39,7 +39,7 @@ reporting and local safety threads. No Redis, external database, shared LAN file
 
 | Entity | Transitions |
 |---|---|
-| Job | queued → running → succeeded; queued/running → failed or cancelled; empty → succeeded |
+| Job | queued → running → succeeded; running → queued when only queued/retrying chunks remain; queued/running → failed or cancelled; empty → succeeded |
 | Chunk | queued → running → succeeded; running → queued after retryable infrastructure loss; queued/running → cancelled on parent terminal intent; running → failed on deterministic failure/attempt limit |
 | Attempt | running → succeeded, script_error, invalid_result, timeout, oom, infrastructure, interrupted, expired or cancelled; terminal history remains |
 | Worker | accepting, paused, draining or stopped; online is computed from heartbeat age; credential expiry/revocation takes precedence |

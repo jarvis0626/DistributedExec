@@ -3,6 +3,7 @@ import importlib.util
 import json
 import os
 import resource
+import sys
 import traceback
 
 resource.setrlimit(resource.RLIMIT_FSIZE, (4 * 1024 * 1024, 4 * 1024 * 1024))
@@ -15,6 +16,7 @@ def main():
             request = json.load(f)
         spec = importlib.util.spec_from_file_location('submitted_task', '/input/task.py')
         module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
         spec.loader.exec_module(module)
         function = getattr(module, request['function_name'])
         if not callable(function):

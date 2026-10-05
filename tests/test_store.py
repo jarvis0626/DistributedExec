@@ -106,6 +106,16 @@ def test_busy_heartbeat_and_lease_recovery(store):
     assert store.result(job) == [7]
 
 
+def test_fifo_when_submission_timestamps_tie(store):
+    worker = register(store, cpu=1, concurrency=1)
+    earlier = submit(store, [1, 2])
+    later = submit(store, [3])
+    for expected in [earlier, earlier, later]:
+        task = store.claim(worker)
+        assert task['job_id'] == expected
+        complete(store, worker, task)
+
+
 def test_ownership_revoke_and_expired_credential(store):
     worker = register(store)
     second = register(store, 'second')

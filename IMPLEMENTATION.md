@@ -4,7 +4,7 @@
 - [x] B: Durable SQLite coordinator, authenticated transfer, isolated Docker execution, ordered downloads.
 - [x] C: Concurrent scheduling, renewable leases, recovery, logs, revocation and cancellation.
 - [x] D: Native launcher, Docker onboarding, offline browser dashboard.
-- [ ] E: Windows onedir build, automated acceptance checks, documentation and handoff.
+- [x] E: Windows onedir build, automated acceptance checks, documentation and handoff.
 
 Each major milestone is committed and pushed to origin/main as requested. No release publication.
 
@@ -43,3 +43,14 @@ pairing rotation/revocation and diagnostics. Its widget tests use Windows Qt's o
 Headless Edge browser tests blocked all external requests and verified locally bundled Monaco,
 upload clearing, a working text fallback, queued jobs, empty output preview/download and onboarding.
 `python -m pytest -q`: 30 passed. `node --check static/app.js`: passed.
+
+## Milestone E verification
+
+Final source suite: 34 passed, including ordinary Python module/annotation loading, FIFO timestamp ties,
+Docker orphan protection and corrupted-transfer cleanup.
+Pinned build dependencies, PyInstaller spec, hidden service dispatch, complete license notices and a
+Windows Actions artifact workflow are included. tools/build_windows.ps1 passed its 19 host-only checks,
+built the onedir distribution, and ran the packaged smoke test successfully with real Docker execution.
+The benchmark checked equivalent local/distributed result equality and reported startup/transfer overhead.
+Open dist/DistributedExec/DistributedExec.exe; keep the complete folder. Detailed evidence and remaining
+clean-machine/manual acceptance limits are in docs/VERIFICATION.md. No release or public deployment.

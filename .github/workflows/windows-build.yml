@@ -1,0 +1,27 @@
+name: Windows build and acceptance
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-lock.txt
+      - name: Build, test and smoke-test the application
+        shell: pwsh
+        run: ./tools/build_windows.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DistributedExec-windows-onedir
+          path: dist/DistributedExec/
+          if-no-files-found: error
+          include-hidden-files: true
